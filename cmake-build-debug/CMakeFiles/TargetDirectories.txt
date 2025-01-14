@@ -1,0 +1,3 @@
+/home/valmorx/CLionProjects/OpenCV_Yolov11/cmake-build-debug/CMakeFiles/OpenCV_Yolov11.dir
+/home/valmorx/CLionProjects/OpenCV_Yolov11/cmake-build-debug/CMakeFiles/edit_cache.dir
+/home/valmorx/CLionProjects/OpenCV_Yolov11/cmake-build-debug/CMakeFiles/rebuild_cache.dir
