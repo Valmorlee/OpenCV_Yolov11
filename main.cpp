@@ -1,6 +1,8 @@
 #include<bits/stdc++.h>
+#include<time.h>
 #include<opencv2/opencv.hpp>
 #include<opencv2/dnn/dnn.hpp>
+#include<opencv2/core/cuda.hpp>
 
 using cv::Mat;
 using std::vector;
@@ -229,9 +231,18 @@ void VideoProc(int index) {
     }
 
     Mat img;
+    double FPS=0;
+    double time = clock();
+    long long frame_cnt = 0;
     cv::VideoCapture cap(index,cv::CAP_V4L2);
 
+
     while (true) {
+        frame_cnt++;
+        FPS = (double)frame_cnt / ((clock()-time)/CLOCKS_PER_SEC);
+        std::cout << time << " " << clock()<<std::endl;
+        string s="FPS: "+std::to_string(FPS);
+
         cap.read(img);
         int img_width=img.cols,img_height=img.rows;
 
@@ -239,8 +250,12 @@ void VideoProc(int index) {
             std::cout << "Empty / Done." << std::endl;
             break;
         }
+        cv::flip(img,img,1);
+        cv::putText(img,s.c_str(),cv::Point(10,30),1,1,cv::Scalar(0,255,0),2);
 
         cv::namedWindow("image",cv::WINDOW_AUTOSIZE);
+
+
         imshow("image",img);
 
         Mat blob = cv::dnn::blobFromImage(img,1.0/255.0,cv::Size(ONNX_Width,ONNX_Height),cv::Scalar(),true);
@@ -258,6 +273,7 @@ void VideoProc(int index) {
 
             char c=cv::waitKey(30);
             if (c==27) break;
+
             continue;
         }
 
@@ -270,13 +286,15 @@ void VideoProc(int index) {
         //std::cout << info.size() << " " << info[0].size() << std::endl;
 
         nms(info_split[0]);
-        print_info(info_split[0]);
+        //print_info(info_split[0]);
         drawBox(img,info_split[0]);
+
         resize(img,img,cv::Size(img_width,img_height));
         imshow("image",img);
 
         char c=cv::waitKey(30);
         if (c==27) break;
+
     }
     cv::destroyAllWindows();
 }
@@ -333,6 +351,7 @@ void VideoProc(string VideoPath) {
         nms(info_split[0]);
         print_info(info_split[0]);
         drawBox(img,info_split[0]);
+
         resize(img,img,cv::Size(img_width,img_height));
         imshow("image",img);
 
@@ -342,10 +361,21 @@ void VideoProc(string VideoPath) {
     cv::destroyAllWindows();
 }
 
+void cuda_test() {
+    cv::cuda::printCudaDeviceInfo(cv::cuda::getDevice());
+
+    int cnt=cv::cuda::getCudaEnabledDeviceCount();
+
+    std::cout << "Device count: " << cnt << std::endl;
+
+}
+
 int main() {
     string path_Target = "/home/valmorx/CLionProjects/OpenCV_Yolov11/Lib_Photo/06.jpg";
     //PhotoProc(path_Target);
-    VideoProc(0);
+    //VideoProc(0);
     string path_Video = "/home/valmorx/CLionProjects/OpenCV_Yolov11/Lib_Photo/01.mp4";
     //VideoProc(path_Video);
+
+    cuda_test();
 }
