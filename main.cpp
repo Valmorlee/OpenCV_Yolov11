@@ -1,5 +1,5 @@
 #include<bits/stdc++.h>
-#include<time.h>
+#include<sys/time.h>
 #include<opencv2/opencv.hpp>
 #include<opencv2/dnn/dnn.hpp>
 #include<opencv2/core/cuda.hpp>
@@ -13,7 +13,7 @@ std::string ONNX_Path ="/home/valmorx/PycharmProjects/TransONNX/yolo11n.onnx";
 int ONNX_Width = 640;
 int ONNX_Height = 480;
 
-static const vector<string> class_name = {};
+static const vector<string> class_name = {}; //分类的模型
 
 
 void print_result(const Mat& result,float conf=0.5,int len_data=84) {
@@ -49,7 +49,7 @@ vector<vector<float>> get_info (const Mat& result,float conf=0.5,int len_data=84
     return info;
 }
 
-void info_simplify(vector<vector<float>> &info) { //坐标转化与
+void info_simplify(vector<vector<float>> &info) { //坐标转化与超限检测
 
     if (info.empty()) {
         return;
@@ -97,6 +97,7 @@ vector<vector<vector<float>>> split_info(vector<vector<float>>& info) { //分类
 }
 
 bool cmp(vector<float> a,vector<float> b) {return a[4]>b[4];}
+
 void nms(vector<vector<float>> &info,float IOU = 0.8) { //NMS去重函数
 
     if (info.empty()) {
@@ -110,7 +111,7 @@ void nms(vector<vector<float>> &info,float IOU = 0.8) { //NMS去重函数
         return_info.clear();
         float x1=0,x2=0,y1=0,y2=0;
 
-        std::sort(info.begin(),info.end(),cmp);
+        std::ranges::sort(info.begin(),info.end(),cmp);
 
         for (auto i=0;i<info.size(); i++) {
             if (i<counter) {
@@ -129,20 +130,19 @@ void nms(vector<vector<float>> &info,float IOU = 0.8) { //NMS去重函数
                 if (info[i][0] > x2 || info[i][2] < x1 ||info[i][1] > y2 || info[i][3] < y1) {
                     return_info.push_back(info[i]);
                 }else {
-                    float over_x1 = std::max(x1,info[i][0]);
-                    float over_y1 = std::max(y1,info[i][1]);
-                    float over_x2 = std::min(x2,info[i][2]);
-                    float over_y2 = std::min(y2,info[i][3]);
+                    const float over_x1 = std::max(x1,info[i][0]);
+                    const float over_y1 = std::max(y1,info[i][1]);
+                    const float over_x2 = std::min(x2,info[i][2]);
+                    const float over_y2 = std::min(y2,info[i][3]);
 
-                    float s_over = (over_x2-over_x1)*(over_y2-over_y1);
-                    float s_total = (x2-x1)*(y2-y1)+(info[i][0]-info[i][2])*(info[i][1]-info[i][3])-s_over;
-                    float ratio = 1.0*s_over/s_total;
-
-                    //std::cout << ratio << std::endl;
+                    const float s_over = (over_x2-over_x1)*(over_y2-over_y1); //交叉面积
+                    const float s_total = (x2-x1)*(y2-y1)+(info[i][0]-info[i][2])*(info[i][1]-info[i][3])-s_over;
+                    float ratio = 1.0*s_over/s_total; //交叉比率
 
                     if (ratio < IOU) {
                         return_info.push_back(info[i]);
                     }
+
                 }
             }
         }
@@ -179,7 +179,7 @@ void drawBox(Mat& img,const vector<vector<float>> &info) { //画框框
         oss<<info[i][4];
 
         label += oss.str();
-        cv::putText(img,label,cv::Point(info[i][0],info[i][1]),1,1,cv::Scalar(0,255,0),2);
+        cv::putText(img,label,cv::Point(info[i][0],info[i][1]),2,1,cv::Scalar(0,255,0),2);
     }
 
 }
@@ -224,6 +224,9 @@ void PhotoProc(string path_Target) {
 
 void VideoProc(int index) {
     cv::dnn::Net mynet=cv::dnn::readNetFromONNX(ONNX_Path);
+    //mynet.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA_FP16);
+    //mynet.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
+
 
     if (mynet.empty()) {
         std::cout << "Empty net." << std::endl;
@@ -232,15 +235,16 @@ void VideoProc(int index) {
 
     Mat img;
     double FPS=0;
-    double time = clock();
-    long long frame_cnt = 0;
-    cv::VideoCapture cap(index,cv::CAP_V4L2);
 
+    cv::VideoCapture cap(index,cv::CAP_V4L2);
+    cap.set(cv::CAP_PROP_FOURCC,cv::VideoWriter::fourcc('M','J','P','G'));
 
     while (true) {
-        frame_cnt++;
-        FPS = (double)frame_cnt / ((clock()-time)/CLOCKS_PER_SEC);
-        std::cout << time << " " << clock()<<std::endl;
+
+        struct timeval start,end;
+        unsigned long timer;
+        gettimeofday(&start,NULL);
+
         string s="FPS: "+std::to_string(FPS);
 
         cap.read(img);
@@ -251,7 +255,7 @@ void VideoProc(int index) {
             break;
         }
         cv::flip(img,img,1);
-        cv::putText(img,s.c_str(),cv::Point(10,30),1,1,cv::Scalar(0,255,0),2);
+        cv::putText(img,s.c_str(),cv::Point(10,30),2,1,cv::Scalar(0,0,255),2);
 
         cv::namedWindow("image",cv::WINDOW_AUTOSIZE);
 
@@ -261,12 +265,21 @@ void VideoProc(int index) {
         Mat blob = cv::dnn::blobFromImage(img,1.0/255.0,cv::Size(ONNX_Width,ONNX_Height),cv::Scalar(),true);
         mynet.setInput(blob);
 
-        Mat processed=mynet.forward();
+        std::vector<cv::Mat> netoutput;
+        std::vector<string> outNames=mynet.getUnconnectedOutLayersNames();
+        outNames={"onnx_node!/model.23/Concat_5"};
 
+        mynet.forward(netoutput,outNames);
+        //Mat processed=mynet.forward();
+
+        gettimeofday(&end,NULL);
+        timer = 1000000*(end.tv_sec-start.tv_sec)+end.tv_usec-start.tv_usec;
+        //std::cout<<timer<<std::endl;
+        FPS=1.0*1000000/timer;
 
         //print_result(processed);
-
-        vector<vector<float>> info = get_info(processed);
+        Mat result=netoutput[0];
+        vector<vector<float>> info = get_info(result);
 
         if (info.empty()) {
             imshow("image",img);
@@ -296,6 +309,7 @@ void VideoProc(int index) {
         if (c==27) break;
 
     }
+    cap.release();
     cv::destroyAllWindows();
 }
 
@@ -373,9 +387,9 @@ void cuda_test() {
 int main() {
     string path_Target = "/home/valmorx/CLionProjects/OpenCV_Yolov11/Lib_Photo/06.jpg";
     //PhotoProc(path_Target);
-    //VideoProc(0);
+    VideoProc(0);
     string path_Video = "/home/valmorx/CLionProjects/OpenCV_Yolov11/Lib_Photo/01.mp4";
     //VideoProc(path_Video);
 
-    cuda_test();
+    //cuda_test();
 }
